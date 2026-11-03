@@ -103,13 +103,17 @@ def _http_get(url: str, cache: Path | None) -> bytes:
     if cache is not None and cache.exists():
         return cache.read_bytes()
     last = None
-    for attempt in range(5):
+    for attempt in range(6):
         try:
             r = requests.get(url, headers=UA, timeout=30)
             if r.status_code == 404:
                 data = b""
             elif r.status_code == 200:
                 data = r.content
+            elif r.status_code in (429, 503):          # throttled: back off properly
+                last = RuntimeError(f"HTTP {r.status_code}")
+                time.sleep(min(60, 5 * 2 ** attempt))
+                continue
             else:
                 raise RuntimeError(f"HTTP {r.status_code}")
             if cache is not None:
@@ -154,7 +158,7 @@ def _fix_scale(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def dukascopy(symbol: str, kind: str, start: str, end: str | None = None,
-              point: float = 1000.0, workers: int = 4, progress=print) -> pd.DataFrame:
+              point: float = 1000.0, workers: int | None = None, progress=print) -> pd.DataFrame:
     """kind='min' -> 1-minute candles (one file per day); kind='hour' -> 1h (one file per month)."""
     today = pd.Timestamp.now(tz="UTC").normalize()
     s = pd.Timestamp(start, tz="UTC").normalize()
@@ -177,6 +181,7 @@ def dukascopy(symbol: str, kind: str, start: str, end: str | None = None,
         raise ValueError(kind)
 
     frames, done = [], 0
+    workers = workers or int(os.environ.get("DUKA_WORKERS", "4"))
 
     def work(job):
         url, base, cache = job

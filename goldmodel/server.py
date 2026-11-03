@@ -109,30 +109,37 @@ class Market:
 
 def _cloud_bootstrap(markets: dict, m5_days: int):
     """First start on a host (e.g. Render): download history in the background, then go live."""
-    import requests as _rq
-    for url in (f"{data.DUKA}/XAUUSD/2026/09/02/BID_candles_min_1.bi5", f"{data.DUKA}/XAUUSD/2026/08/BID_candles_hour_1.bi5"):
-        t0 = time.time()
-        try:
-            r = _rq.get(url, headers=data.UA, timeout=30)
-            df = data.decode_bi5(r.content, pd.Timestamp("2026-10-02", tz="UTC"), 1000.0) if r.status_code == 200 else None
-            print(f"[diag] {url} -> HTTP {r.status_code}, {len(r.content)} bytes, {time.time()-t0:.1f}s, "
-                  f"rows={None if df is None else len(df)}, first={None if df is None or df.empty else df.iloc[0].to_dict()}", flush=True)
-        except Exception as e:  # noqa: BLE001
-            print(f"[diag] {url} -> {type(e).__name__}: {e} after {time.time()-t0:.1f}s", flush=True)
-    for inst in ("spot", "futures"):
+    # futures first: Yahoo is quick, so the page has something real within a minute or two
+    for inst in ("futures", "spot"):
         m = markets[inst]
         if m.engine is not None:
             continue
-        m.error = "Loading market data - the first start takes 2-4 minutes. This page refreshes itself."
+        m.error = "Loading market data - the first start takes a few minutes. This page refreshes itself."
         try:
-            start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=m5_days)).strftime("%Y-%m-%d")
-            res = data.download_history(inst, "2015-01-01" if inst == "spot" else None, start, progress=lambda x: print(x, flush=True))
+            if inst == "futures":
+                res = data.download_history("futures", progress=lambda x: print(x, flush=True))
+            else:
+                # quick start: hourly history + last 45 days of 1-minute bars; the rest follows below
+                start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=45)).strftime("%Y-%m-%d")
+                res = data.download_history("spot", "2015-01-01", start, progress=lambda x: print(x, flush=True))
             m.load()
             m.poll()
             print(f"[bootstrap] {inst} ready: {res}; last bar {m.m5.index[-1] if m.m5 is not None and len(m.m5) else None}; error={m.error}", flush=True)
         except Exception as e:  # noqa: BLE001
             m.error = f"Could not load {inst} data on this server ({e})."
             print(f"[bootstrap] {inst} FAILED: {e}", flush=True)
+    # extend spot 1-minute history for the 2-year backtest, in the background
+    m = markets["spot"]
+    if m.m5 is not None and len(m.m5) and (m.m5.index[0] > pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=m5_days - 10)):
+        try:
+            old_start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=m5_days)).strftime("%Y-%m-%d")
+            m1 = data.dukascopy("XAUUSD", "min", old_start, m.m5.index[0].strftime("%Y-%m-%d"), progress=lambda x: print(x, flush=True))
+            m.m5 = data.merge(data.resample(m1, "5min"), m.m5)
+            data.save(m.m5, "spot_m5")
+            m.rebuild()
+            print(f"[bootstrap] spot history extended to {m.m5.index[0]}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[bootstrap] spot history extension failed: {e}", flush=True)
 
 
 def create_app(demo: bool = False, poll_seconds: int = 60, cloud: bool = False, m5_days: int = 760) -> FastAPI:
