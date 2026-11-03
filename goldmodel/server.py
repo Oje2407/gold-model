@@ -109,6 +109,16 @@ class Market:
 
 def _cloud_bootstrap(markets: dict, m5_days: int):
     """First start on a host (e.g. Render): download history in the background, then go live."""
+    import requests as _rq
+    for url in (f"{data.DUKA}/XAUUSD/2026/09/02/BID_candles_min_1.bi5", f"{data.DUKA}/XAUUSD/2026/08/BID_candles_hour_1.bi5"):
+        t0 = time.time()
+        try:
+            r = _rq.get(url, headers=data.UA, timeout=30)
+            df = data.decode_bi5(r.content, pd.Timestamp("2026-10-02", tz="UTC"), 1000.0) if r.status_code == 200 else None
+            print(f"[diag] {url} -> HTTP {r.status_code}, {len(r.content)} bytes, {time.time()-t0:.1f}s, "
+                  f"rows={None if df is None else len(df)}, first={None if df is None or df.empty else df.iloc[0].to_dict()}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[diag] {url} -> {type(e).__name__}: {e} after {time.time()-t0:.1f}s", flush=True)
     for inst in ("spot", "futures"):
         m = markets[inst]
         if m.engine is not None:

@@ -186,7 +186,7 @@ def dukascopy(symbol: str, kind: str, start: str, end: str | None = None,
         for df in ex.map(work, jobs):
             frames.append(df)
             done += 1
-            if progress and (done % 50 == 0 or done == len(jobs)):
+            if progress and (done % 20 == 0 or done == len(jobs)):
                 progress(f"  {symbol} {kind}: {done}/{len(jobs)} files")
     frames = [f for f in frames if not f.empty]
     if not frames:
