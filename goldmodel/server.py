@@ -116,11 +116,13 @@ def _cloud_bootstrap(markets: dict, m5_days: int):
         m.error = "Loading market data - the first start takes 2-4 minutes. This page refreshes itself."
         try:
             start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=m5_days)).strftime("%Y-%m-%d")
-            data.download_history(inst, "2015-01-01" if inst == "spot" else None, start, progress=print)
+            res = data.download_history(inst, "2015-01-01" if inst == "spot" else None, start, progress=lambda x: print(x, flush=True))
             m.load()
             m.poll()
+            print(f"[bootstrap] {inst} ready: {res}; last bar {m.m5.index[-1] if m.m5 is not None and len(m.m5) else None}; error={m.error}", flush=True)
         except Exception as e:  # noqa: BLE001
             m.error = f"Could not load {inst} data on this server ({e})."
+            print(f"[bootstrap] {inst} FAILED: {e}", flush=True)
 
 
 def create_app(demo: bool = False, poll_seconds: int = 60, cloud: bool = False, m5_days: int = 760) -> FastAPI:
