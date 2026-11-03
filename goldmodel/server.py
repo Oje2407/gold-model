@@ -137,7 +137,7 @@ def create_app(demo: bool = False, poll_seconds: int = 60, cloud: bool = False, 
         if not password or request.cookies.get("gm_key") == password:
             return await call_next(request)
         if request.query_params.get("key") == password:
-            r = RedirectResponse(request.url.path)
+            r = await call_next(request)
             r.set_cookie("gm_key", password, max_age=60 * 60 * 24 * 180, httponly=True, samesite="lax", secure=True)
             return r
         return HTMLResponse('<meta name=viewport content="width=device-width,initial-scale=1"><body style="font:16px system-ui;background:#0e0f11;color:#e7e4dc;padding:40px 20px"><h3>Gold model</h3><form><input name=key type=password placeholder="Password" style="font-size:16px;padding:10px;width:100%;max-width:320px"><br><br><button style="font-size:16px;padding:10px 18px">Open</button></form>', 401)
