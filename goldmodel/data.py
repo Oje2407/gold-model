@@ -217,6 +217,64 @@ def yf_download(ticker: str, interval: str, period: str) -> pd.DataFrame:
     return clean(df)
 
 
+# ----------------------------------------------------------------------------- OANDA (spot, recommended)
+def _oanda_base() -> str:
+    env = os.environ.get("OANDA_ENV", "practice").lower()
+    return "https://api-fxtrade.oanda.com" if env in ("live", "trade", "fxtrade") else "https://api-fxpractice.oanda.com"
+
+
+def oanda_parse(candles: list) -> pd.DataFrame:
+    rows = [c for c in candles if c.get("complete")]
+    if not rows:
+        return empty()
+    px = [c.get("bid") or c.get("mid") for c in rows]
+    df = pd.DataFrame({"open": [float(p["o"]) for p in px], "high": [float(p["h"]) for p in px],
+                       "low": [float(p["l"]) for p in px], "close": [float(p["c"]) for p in px],
+                       "volume": [float(c.get("volume", 0)) for c in rows]},
+                      index=pd.DatetimeIndex(pd.to_datetime([c["time"] for c in rows], utc=True)))
+    return clean(df)
+
+
+def oanda(granularity: str, start: str | pd.Timestamp | None = None, count: int | None = None,
+          instrument: str = "XAU_USD", progress=print) -> pd.DataFrame:
+    """Bid candles (M5, H1, D...) from OANDA v20. Needs OANDA_API_TOKEN (a free demo account works)."""
+    token = os.environ.get("OANDA_API_TOKEN")
+    if not token:
+        raise RuntimeError("OANDA_API_TOKEN not set")
+    url = f"{_oanda_base()}/v3/instruments/{instrument}/candles"
+    hdr = {"Authorization": f"Bearer {token}", "Accept-Datetime-Format": "RFC3339"}
+
+    def get(params):
+        for attempt in range(4):
+            r = requests.get(url, headers=hdr, params=params, timeout=30)
+            if r.status_code == 200:
+                return r.json().get("candles", [])
+            if r.status_code in (401, 403):
+                raise RuntimeError(f"OANDA rejected the token (HTTP {r.status_code}). Check OANDA_API_TOKEN / OANDA_ENV.")
+            time.sleep(2 * (attempt + 1))
+        raise RuntimeError(f"OANDA HTTP {r.status_code}: {r.text[:200]}")
+
+    if start is None:
+        return oanda_parse(get({"granularity": granularity, "price": "B", "count": count or 500}))
+    frames, cur, now, n = [], pd.Timestamp(start, tz="UTC") if not isinstance(start, pd.Timestamp) else start, pd.Timestamp.now(tz="UTC"), 0
+    while cur < now:
+        c = get({"granularity": granularity, "price": "B", "count": 5000, "from": cur.strftime("%Y-%m-%dT%H:%M:%SZ")})
+        if not c:
+            break
+        frames.append(oanda_parse(c))
+        last = pd.Timestamp(c[-1]["time"])
+        if last <= cur:
+            break
+        cur = last + pd.Timedelta(seconds=1)
+        n += 1
+        if progress and n % 5 == 0:
+            progress(f"  OANDA {instrument} {granularity}: up to {last:%Y-%m-%d}")
+        if len(c) < 5000:
+            break
+    frames = [f for f in frames if not f.empty]
+    return clean(pd.concat(frames)) if frames else empty()
+
+
 # ----------------------------------------------------------------------------- Twelve Data (spot live)
 def twelvedata(symbol: str = "XAU/USD", interval: str = "5min", n: int = 300, key: str | None = None) -> pd.DataFrame:
     key = key or os.environ.get("TWELVE_DATA_API_KEY")
@@ -261,6 +319,14 @@ def import_csv(path: str, tz: str = "UTC", time_col: str | None = None) -> pd.Da
 def download_history(inst: str, h1_start: str = "2015-01-01", m5_start: str | None = None, progress=print):
     """Fetch and store everything the model needs. Spot: Dukascopy. Futures: yfinance."""
     m5_start = m5_start or (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=365 * 2 + 120)).strftime("%Y-%m-%d")
+    if inst == "spot" and os.environ.get("OANDA_API_TOKEN"):
+        progress(f"Downloading OANDA XAU_USD hourly from {h1_start} and 5-minute from {m5_start}...")
+        h1 = oanda("H1", h1_start, progress=progress)
+        m5 = oanda("M5", m5_start, progress=progress)
+        if m5.empty:
+            raise RuntimeError("OANDA returned no XAU_USD data")
+        save(h1, "spot_h1"), save(m5, "spot_m5")
+        return {"source": "OANDA", "h1": len(h1), "m5": len(m5)}
     if inst == "spot":
         sym, pt = INSTRUMENTS["spot"]["duka"], INSTRUMENTS["spot"]["point"]
         progress(f"Downloading {sym} hourly from {h1_start} (for monthly/weekly bias)...")
@@ -286,7 +352,9 @@ def update_live(inst: str, m5: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     """Append the latest closed M5 bars. Returns (frame, source used)."""
     bar = pd.Timedelta(minutes=5)
     if inst == "spot":
-        if os.environ.get("TWELVE_DATA_API_KEY"):
+        if os.environ.get("OANDA_API_TOKEN"):
+            new, src = oanda("M5", count=300), "OANDA (live)"
+        elif os.environ.get("TWELVE_DATA_API_KEY"):
             new, src = twelvedata(n=300), "Twelve Data"
         else:
             start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=2)).strftime("%Y-%m-%d")

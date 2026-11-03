@@ -46,6 +46,9 @@ python -m goldmodel serve --demo            # try the page on synthetic data: ht
 
 ## Real data
 
+**Recommended for spot: OANDA.** Create a free OANDA demo (practice) account, generate an API token under *Manage API Access*, and set `OANDA_API_TOKEN` (add `OANDA_ENV=live` only for a live-account token). The model then loads XAU_USD hourly history since 2015 and 2 years of 5-minute bid candles in about a minute, and polls live 5-minute candles. Dukascopy remains the fallback when no token is set, but it throttles cloud servers heavily.
+
+
 ```bash
 python -m goldmodel download spot           # Dukascopy XAUUSD: hourly since 2015 + 1-minute for ~2.3 years (first run 10-30 min, cached after)
 python -m goldmodel download futures        # Yahoo GC=F: daily history, 730 days hourly, but only 60 days of 5-minute
