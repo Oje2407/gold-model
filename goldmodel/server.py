@@ -111,17 +111,16 @@ def _cloud_bootstrap(markets: dict, m5_days: int):
     import os
 
     """First start on a host (e.g. Render): download history in the background, then go live."""
-    # futures first: Yahoo is quick, so the page has something real within a minute or two
-    for inst in ("futures", "spot"):
+    def boot(inst):
         m = markets[inst]
         if m.engine is not None:
-            continue
+            return
         m.error = "Loading market data - the first start takes a few minutes. This page refreshes itself."
         try:
+            print(f"[bootstrap] {inst} starting", flush=True)
             if inst == "futures":
                 res = data.download_history("futures", progress=lambda x: print(x, flush=True))
             else:
-                # quick start: hourly history + last 45 days of 1-minute bars; the rest follows below
                 fast = bool(os.environ.get("OANDA_API_TOKEN"))   # OANDA serves 2 years in about a minute
                 start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=m5_days if fast else 45)).strftime("%Y-%m-%d")
                 res = data.download_history("spot", "2015-01-01", start, progress=lambda x: print(x, flush=True))
@@ -131,6 +130,13 @@ def _cloud_bootstrap(markets: dict, m5_days: int):
         except Exception as e:  # noqa: BLE001
             m.error = f"Could not load {inst} data on this server ({e})."
             print(f"[bootstrap] {inst} FAILED: {e}", flush=True)
+
+    # spot and futures load side by side, so a slow source never holds up the other
+    threads = [threading.Thread(target=boot, args=(i,), daemon=True) for i in ("spot", "futures")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     # extend spot 1-minute history for the 2-year backtest, in the background (Dukascopy only)
     m = markets["spot"]
     if not os.environ.get("OANDA_API_TOKEN") and m.m5 is not None and len(m.m5) and (m.m5.index[0] > pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=m5_days - 10)):

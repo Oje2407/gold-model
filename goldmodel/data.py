@@ -203,7 +203,7 @@ def dukascopy(symbol: str, kind: str, start: str, end: str | None = None,
 def yf_download(ticker: str, interval: str, period: str) -> pd.DataFrame:
     import yfinance as yf  # optional dependency
 
-    df = yf.download(ticker, interval=interval, period=period, auto_adjust=False, progress=False)
+    df = yf.download(ticker, interval=interval, period=period, auto_adjust=False, progress=False, timeout=30, threads=False)
     if df is None or df.empty:
         return empty()
     if isinstance(df.columns, pd.MultiIndex):
