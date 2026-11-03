@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gold Top-Down Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/static/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#0e0f11;--panel:#16181c;--line:#262a31;--text:#e7e4dc;--mute:#8b8f98;--gold:#d4a843;--up:#3fb68b;--dn:#e5534b;--warn:#d9a441;--chip:#1f2329}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "IBM Plex Sans",system-ui,sans-serif}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+h1{font-size:15px;margin:0;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);font-weight:600}
+.price{font:600 22px "IBM Plex Mono",monospace}
+.seg{display:flex;background:var(--chip);border-radius:8px;padding:3px}
+.seg button{background:none;border:0;color:var(--mute);padding:6px 11px;border-radius:6px;cursor:pointer;font:inherit}
+.seg button.on{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.meta{color:var(--mute);font-size:12px}
+.badge{padding:3px 9px;border-radius:999px;font:600 12px "IBM Plex Mono",monospace}
+.b-BUY{background:#1b3a2f;color:var(--up)}.b-SELL{background:#3d1f1e;color:var(--dn)}.b-MIXED{background:var(--chip);color:var(--mute)}
+main{padding:16px;max-width:1400px;margin:0 auto}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}#t-live>.grid>div:last-child{order:-1}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;min-width:0}
+.card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:600}
+.bias{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.tf{background:var(--chip);border-radius:8px;padding:10px 4px;text-align:center;min-width:0}
+.tf .n{color:var(--mute);font-size:12px}.tf .v{font:600 20px "IBM Plex Mono",monospace}
+.tf .s{font-size:11px;color:var(--mute)}
+.up{color:var(--up)}.dn{color:var(--dn)}.flat{color:var(--mute)}
+#chart{height:430px}
+@media(max-width:600px){#chart{height:320px}}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mute);font-weight:500;font-size:12px}
+.scroll{overflow-x:auto}
+.sig{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px}
+.sig .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.chip{background:var(--chip);border-radius:6px;padding:2px 7px;font-size:12px;color:var(--mute)}
+.chip.live{background:#3a2e12;color:var(--warn)}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.kv div{background:var(--chip);border-radius:6px;padding:6px}.kv span{display:block;color:var(--mute);font-size:11px}
+.notes{margin:8px 0 0;padding-left:18px;color:var(--text);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:700px){.stats{grid-template-columns:1fr}}
+.stat h3{margin:0 0 6px;font-size:14px;color:var(--gold)}
+.stat dl{display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin:0;font-size:13px}
+.stat dt{color:var(--mute)}.stat dd{margin:0;font-family:"IBM Plex Mono",monospace}
+button.act{background:var(--gold);color:#17130a;border:0;border-radius:7px;padding:8px 14px;font:600 13px inherit;cursor:pointer}
+button.ghost{background:var(--chip);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit}
+input,select{background:var(--chip);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:100%}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.form label{font-size:12px;color:var(--mute)}
+.banner{background:#3a2e12;color:var(--warn);padding:8px 16px;font-size:13px}
+.err{background:#3d1f1e;color:#f0a5a0;padding:8px 12px;border-radius:8px;margin-bottom:12px}
+.hide{display:none}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#equity{height:260px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:6px}
+.legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+<div id="demo" class="banner hide">Demo mode: synthetic prices for trying the app. Run <span class="mono">python -m goldmodel download spot</span> for real data.</div>
+<header>
+  <h1>Gold · Top-Down</h1>
+  <div class="seg" id="inst"></div>
+  <div class="price" id="price">—</div>
+  <span class="badge b-MIXED" id="aligned">—</span>
+  <div class="meta" id="meta"></div>
+  <div style="flex:1"></div>
+  <div class="seg" id="tabs">
+    <button data-t="live" class="on">Live</button><button data-t="bt">Backtest</button><button data-t="cfg">Rules</button>
+  </div>
+</header>
+<main>
+  <div id="error" class="err hide"></div>
+
+  <section id="t-live">
+    <div class="grid">
+      <div>
+        <div class="card"><h2>Top-down bias (closed bars only)</h2><div class="bias" id="bias"></div></div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px">
+            <h2 style="margin:0">Chart</h2>
+            <div class="seg" id="tfs"></div>
+          </div>
+          <div id="chart"></div>
+          <div class="legend"><span><i style="background:#d4a843"></i>EMA 8</span><span><i style="background:#6aa7ff"></i>EMA 21</span><span><i style="background:#b07cf0"></i>EMA 50</span><span><i style="background:#8b8f98"></i>EMA 200</span><span>Dashed = PDH/PDL · dotted = S/R zones</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="card"><h2>Signals · last 3 days</h2><div id="signals"></div>
+          <div class="row" style="margin-top:8px"><button class="ghost" id="notify">Enable alerts</button><button class="ghost" id="refresh">Refresh now</button></div>
+        </div>
+        <div class="card"><h2>Watching</h2><div id="watch"></div></div>
+        <div class="card"><h2>Daily candle context</h2><div id="day"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="t-bt" class="hide">
+    <div class="card">
+      <div class="row">
+        <button class="act" id="runbt">Run backtest</button>
+        <label class="meta">Years <input id="years" type="number" value="2" min="0.5" max="10" step="0.5" style="width:70px;display:inline-block"></label>
+        <span class="meta" id="btstatus"></span>
+      </div>
+      <p class="meta" id="regime" style="margin:10px 0 0"></p>
+    </div>
+    <div class="card"><h2>Results by period</h2><div class="stats" id="periods"></div></div>
+    <div class="card"><h2>Equity (cumulative R)</h2><div id="equity"></div></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">What is working</h2><select id="perSel" style="width:auto"></select></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+        <div class="scroll" id="bySetup"></div><div class="scroll" id="bySession"></div>
+        <div class="scroll" id="byGrade"></div><div class="scroll" id="byDir"></div>
+      </div>
+    </div>
+    <div class="card"><h2>Rule variants (same data)</h2><div class="scroll" id="sweep"></div></div>
+    <div class="card"><h2>By month</h2><div class="scroll" id="byMonth"></div></div>
+    <div class="card"><h2>Trades (latest 150)</h2><div class="scroll" id="trades"></div></div>
+  </section>
+
+  <section id="t-cfg" class="hide">
+    <div class="card"><h2>Model rules for this instrument</h2>
+      <p class="meta">Saved rules drive the live scanner and the next backtest. ATR = daily ATR(14).</p>
+      <div class="form" id="form"></div>
+      <div class="row" style="margin-top:12px"><button class="act" id="save">Save rules</button><span class="meta" id="saved"></span></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+let INST='spot', TF='M15', chart, candle, emaS={}, lines=[], state=null, seen=new Set(JSON.parse(localStorageGet('seen')||'[]')), bt=null;
+function localStorageGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function localStorageSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+const fmt=(x,d=2)=>x==null?'—':Number(x).toFixed(d);
+const arrow=b=>b>0?'<span class="up">▲</span>':b<0?'<span class="dn">▼</span>':'<span class="flat">–</span>';
+const vote=b=>b>0?'+':b<0?'−':'0';
+async function api(p,opt){const r=await fetch(p,opt);if(!r.ok)throw new Error((await r.json()).detail||r.statusText);return r.json()}
+
+/* ---------- tabs & selectors */
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  ['live','bt','cfg'].forEach(t=>$('#t-'+t).classList.toggle('hide',t!==b.dataset.t));
+  if(b.dataset.t==='bt')loadBt(); if(b.dataset.t==='cfg')loadCfg(); if(b.dataset.t==='live')setTimeout(()=>chart&&chart.applyOptions({}),0);
+});
+['M5','M15','H4','D','W','M'].forEach(tf=>{const b=document.createElement('button');b.textContent=tf;b.className=tf===TF?'on':'';b.onclick=()=>{TF=tf;document.querySelectorAll('#tfs button').forEach(x=>x.classList.toggle('on',x===b));loadChart()};$('#tfs').appendChild(b)});
+api('/api/instruments').then(list=>list.forEach(i=>{const b=document.createElement('button');b.textContent=i.id==='spot'?'Spot XAUUSD':'Futures GC';b.className=i.id===INST?'on':'';b.onclick=()=>{INST=i.id;document.querySelectorAll('#inst button').forEach(x=>x.classList.toggle('on',x===b));bt=null;refreshAll();if(!$('#t-bt').classList.contains('hide'))loadBt();if(!$('#t-cfg').classList.contains('hide'))loadCfg()};$('#inst').appendChild(b)}));
+
+/* ---------- chart */
+function makeChart(){
+  const el=$('#chart');
+  chart=LightweightCharts.createChart(el,{autoSize:true,layout:{background:{color:'#16181c'},textColor:'#8b8f98',fontFamily:'IBM Plex Mono'},
+    grid:{vertLines:{color:'#1d2026'},horzLines:{color:'#1d2026'}},timeScale:{timeVisible:true,borderColor:'#262a31'},rightPriceScale:{borderColor:'#262a31'},crosshair:{mode:0}});
+  candle=chart.addCandlestickSeries({upColor:'#3fb68b',downColor:'#e5534b',borderVisible:false,wickUpColor:'#3fb68b',wickDownColor:'#e5534b'});
+  [['8','#d4a843'],['21','#6aa7ff'],['50','#b07cf0'],['200','#8b8f98']].forEach(([p,c])=>emaS[p]=chart.addLineSeries({color:c,lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}));
+}
+async function loadChart(){
+  if(!state||state.error&&!state.price)return;
+  if(!chart)makeChart();
+  const n={M5:500,M15:400,H4:300,D:300,W:200,M:150}[TF];
+  const d=await api(`/api/candles?inst=${INST}&tf=${TF}&n=${n}`);
+  candle.setData(d.bars); Object.keys(emaS).forEach(p=>emaS[p].setData(d.ema[p]));
+  drawLevels();
+}
+function drawLevels(){
+  if(!candle||!state)return;
+  lines.forEach(l=>candle.removePriceLine(l)); lines=[];
+  const L=(price,color,title,style=2,w=1)=>lines.push(candle.createPriceLine({price,color,lineWidth:w,lineStyle:style,axisLabelVisible:true,title}));
+  const dy=state.day;
+  if(dy){L(dy.pdh,'#e5534b','PDH');L(dy.pdl,'#3fb68b','PDL');
+    dy.zones.slice(0,5).forEach(z=>{L(z.hi,'#5c6370','',1);L(z.lo,'#5c6370','S/R '+z.strength,1)});}
+  const act=(state.signals||[]).find(s=>s.status==='OPEN'||s.status==='ENTER NOW');
+  if(act){L(act.entry,'#d4a843','Entry',0,2);L(act.sl,'#e5534b','SL',0,2);L(act.tp,'#3fb68b','TP',0,2);}
+  if(['M5','M15'].includes(TF)){
+    const mk=(state.signals||[]).map(s=>({time:Date.parse(s.entry_time)/1000-(TF==='M15'?(Date.parse(s.entry_time)/1000)%900:0),position:s.direction==='BUY'?'belowBar':'aboveBar',color:s.direction==='BUY'?'#3fb68b':'#e5534b',shape:s.direction==='BUY'?'arrowUp':'arrowDown',text:s.setup.replace('_REJECT','')})).sort((a,b)=>a.time-b.time);
+    candle.setMarkers(mk);
+  } else candle.setMarkers([]);
+}
+
+/* ---------- live state */
+async function refreshAll(){
+  try{
+    state=await api('/api/state?inst='+INST);
+    $('#demo').classList.toggle('hide',!state.demo);
+    if(state.error){$('#error').textContent=state.error;$('#error').classList.remove('hide')}else $('#error').classList.add('hide');
+    if(!state.price){$('#price').textContent='—';setTimeout(refreshAll,15000);return}
+    $('#price').textContent=fmt(state.price);
+    const a=$('#aligned');a.textContent=state.aligned==='MIXED'?'Mixed':'All TFs '+state.aligned;a.className='badge b-'+state.aligned;
+    $('#meta').innerHTML=`${state.label} · last bar ${new Date(state.time).toUTCString().slice(17,22)} UTC · ${state.source}`;
+    $('#bias').innerHTML=['M','W','D','H4'].map(tf=>{const x=state.bias_detail[tf];return `<div class="tf"><div class="n">${{M:'Monthly',W:'Weekly',D:'Daily',H4:'4-hour'}[tf]}</div><div class="v">${arrow(x.bias)}</div><div class="s">EMA ${vote(x.ema_vote)} · Struct ${vote(x.structure_vote)}</div></div>`}).join('');
+    renderDay(); renderWatch(); renderSignals(); loadChart();
+  }catch(e){$('#error').textContent=e.message;$('#error').classList.remove('hide')}
+}
+function renderDay(){
+  const d=state.day; if(!d){$('#day').innerHTML='<p class="meta">Not enough daily history.</p>';return}
+  $('#day').innerHTML=`<table>
+  <tr><td>Previous day high (PDH)</td><td class="mono">${fmt(d.pdh)}</td></tr>
+  <tr><td>Previous day low (PDL, wick)</td><td class="mono">${fmt(d.pdl)}</td></tr>
+  <tr><td>Day-before high / low</td><td class="mono">${fmt(d.ppdh)} / ${fmt(d.ppdl)}</td></tr>
+  <tr><td>Yesterday struggled at the high</td><td>${d.struggle_high?'<span class="dn">Yes → look for sells at PDH</span>':'No'}</td></tr>
+  <tr><td>Yesterday struggled at the low</td><td>${d.struggle_low?'<span class="up">Yes → look for buys at PDL</span>':'No'}</td></tr>
+  <tr><td>Daily ATR(14)</td><td class="mono">${fmt(d.atr)}</td></tr></table>
+  <h2 style="margin-top:12px">Nearest S/R zones</h2><table><tr><th>Zone</th><th>Strength</th><th>Touches</th></tr>
+  ${d.zones.slice(0,6).map(z=>`<tr><td class="mono">${fmt(z.lo)} – ${fmt(z.hi)}</td><td>${z.strength}</td><td>${z.touches}</td></tr>`).join('')}</table>`;
+}
+function renderWatch(){
+  const w=state.watch||[];
+  $('#watch').innerHTML=w.length?`<table><tr><th>Setup</th><th>Level</th><th>Away</th><th>HTF</th></tr>${w.map(x=>`<tr><td><span class="${x.direction==='BUY'?'up':'dn'}">${x.direction}</span> ${x.setup.replace('_',' ')}${x.meets_filters?'':' <span class="chip">filtered</span>'}</td><td class="mono">${fmt(x.level)}</td><td class="mono">${fmt(x.distance)} (${x.distance_atr} ATR)</td><td>${x.htf_agree}/3</td></tr>`).join('')}</table><p class="meta">Waiting for an M15 rejection candle, then an M5 break to confirm.</p>`
+  :'<p class="meta">No qualifying level within 0.6 ATR of price in the monthly direction.</p>';
+}
+function renderSignals(){
+  const s=state.signals||[];
+  if(!s.length){$('#signals').innerHTML='<p class="meta">No signals in the last 3 days.</p>';return}
+  $('#signals').innerHTML=s.map(x=>{
+    const st=x.status==='CLOSED'?`<span class="chip">${x.exit_reason} ${x.r>=0?'+':''}${fmt(x.r)}R</span>`:`<span class="chip live">${x.status}${x.open_r!=null?' '+(x.open_r>=0?'+':'')+fmt(x.open_r)+'R':''}</span>`;
+    return `<div class="sig"><div class="top"><div><b class="${x.direction==='BUY'?'up':'dn'}">${x.direction}</b> ${x.setup.replace('_',' ')} <span class="chip">Grade ${x.grade}</span></div>${st}</div>
+    <div class="meta">${new Date(x.entry_time).toUTCString().slice(5,22)} UTC · ${x.session} · level ${fmt(x.level)} · M${arrow(x.bias.M)} W${arrow(x.bias.W)} D${arrow(x.bias.D)} H4${arrow(x.bias.H4)}</div>
+    <div class="kv mono"><div><span>Entry</span>${fmt(x.entry)}</div><div><span>Stop</span>${fmt(x.current_sl??x.sl)}</div><div><span>Target · ${x.tp_kind}</span>${fmt(x.tp)}</div></div>
+    ${x.review?`<ul class="notes">${x.review.map(n=>`<li>${n}</li>`).join('')}</ul>`:''}</div>`}).join('');
+  s.forEach(x=>{const k=INST+x.rejection_time+x.direction;if(!seen.has(k)){seen.add(k);if(seen.size>1&&x.status!=='CLOSED')alertNew(x)}});
+  localStorageSet('seen',JSON.stringify([...seen].slice(-300)));
+}
+function alertNew(x){
+  const msg=`${x.direction} ${INST} @ ${fmt(x.entry)}  SL ${fmt(x.sl)}  TP ${fmt(x.tp)} (${x.setup}, grade ${x.grade})`;
+  try{if(Notification.permission==='granted')new Notification('Gold model signal',{body:msg})}catch(e){}
+  try{const c=new AudioContext(),o=c.createOscillator();o.frequency.value=880;o.connect(c.destination);o.start();o.stop(c.currentTime+.25)}catch(e){}
+}
+$('#notify').onclick=()=>{try{Notification.requestPermission().then(p=>$('#notify').textContent=p==='granted'?'Alerts on':'Alerts blocked')}catch(e){}};
+$('#refresh').onclick=async()=>{$('#refresh').textContent='Updating…';try{await api('/api/refresh?inst='+INST,{method:'POST'})}catch(e){}await refreshAll();$('#refresh').textContent='Refresh now'};
+
+/* ---------- backtest */
+let eqChart,eqLine;
+async function loadBt(){
+  const r=await api('/api/backtest?inst='+INST);
+  if(r.status==='running'){$('#btstatus').textContent='Running…';setTimeout(loadBt,1500);return}
+  if(r.status==='error'){$('#btstatus').textContent='Error: '+r.error;return}
+  if(r.status==='done'){bt=r.result;$('#btstatus').textContent=`${bt.range[0].slice(0,10)} → ${bt.range[1].slice(0,10)}${r.seconds?' · '+r.seconds+'s':''}${r.cached?' · saved result':''}`;renderBt()}
+  else $('#btstatus').textContent='Not run yet for this instrument.';
+}
+$('#runbt').onclick=async()=>{try{await api(`/api/backtest?inst=${INST}&years=${$('#years').value}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});$('#btstatus').textContent='Running…';setTimeout(loadBt,1000)}catch(e){$('#btstatus').textContent=e.message}};
+const PN={last_2_years:'Last 2 years'};
+function statBlock(name,s){
+  if(!s||!s.trades)return `<div class="stat"><h3>${PN[name]||name.replace('_ytd',' year-to-date')}</h3><p class="meta">No trades</p></div>`;
+  const rows=[['Trades',s.trades],['Win rate',s.win_rate+'%'],['Breakeven exits',s.breakeven_pct+'%'],['Avg R / trade',(s.avg_r>=0?'+':'')+fmt(s.avg_r)],['Total R',(s.total_r>=0?'+':'')+fmt(s.total_r,1)],['Profit factor',s.profit_factor??'—'],['Avg win / loss',fmt(s.avg_win_r)+' / '+fmt(s.avg_loss_r)],['Max drawdown',fmt(s.max_dd_r,1)+'R'],['Worst losing run',s.longest_losing_streak]];
+  return `<div class="stat"><h3>${PN[name]||name.replace('_ytd',' year-to-date')}</h3><dl>${rows.map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></div>`;
+}
+function tbl(title,rows){
+  if(!rows||!rows.length)return `<h2>${title}</h2><p class="meta">—</p>`;
+  return `<h2>${title}</h2><table><tr><th></th><th>Trades</th><th>Win%</th><th>Avg R</th><th>Total R</th><th>PF</th></tr>${rows.map(r=>`<tr><td>${r.key}</td><td>${r.trades}</td><td>${r.win_rate}</td><td class="${r.avg_r>0?'up':'dn'}">${fmt(r.avg_r)}</td><td>${fmt(r.total_r,1)}</td><td>${r.profit_factor??'—'}</td></tr>`).join('')}</table>`;
+}
+function renderBt(){
+  $('#regime').textContent=bt.regime_note;
+  $('#periods').innerHTML=Object.entries(bt.periods).map(([k,v])=>statBlock(k,v)).join('');
+  const sel=$('#perSel');const cur=sel.value;sel.innerHTML=Object.keys(bt.periods).map(k=>`<option value="${k}">${PN[k]||k.replace('_ytd',' YTD')}</option>`).join('');if(cur&&bt.periods[cur]!==undefined)sel.value=cur;
+  const p=sel.value;sel.onchange=renderBt;
+  $('#bySetup').innerHTML=tbl('By setup',bt.by_setup[p]);$('#bySession').innerHTML=tbl('By session',bt.by_session[p]);
+  $('#byGrade').innerHTML=tbl('By grade',bt.by_grade[p]);$('#byDir').innerHTML=tbl('By direction',bt.by_direction[p]);
+  $('#byMonth').innerHTML=tbl('',bt.by_month.slice().reverse());
+  const pk=Object.keys(bt.periods);
+  $('#sweep').innerHTML=`<table><tr><th>Variant</th>${pk.map(k=>`<th colspan="3">${PN[k]||k.replace('_ytd',' YTD')}</th>`).join('')}</tr><tr><th></th>${pk.map(()=>'<th>Trades</th><th>Avg R</th><th>Total R</th>').join('')}</tr>
+   ${(bt.sweep||[]).map(r=>`<tr><td>${r.label}</td>${pk.map(k=>{const s=r[k]||{};return `<td>${s.trades??0}</td><td class="${(s.avg_r||0)>0?'up':'dn'}">${fmt(s.avg_r)}</td><td>${fmt(s.total_r,1)}</td>`}).join('')}</tr>`).join('')}</table>`;
+  $('#trades').innerHTML=`<table><tr><th>Entry (UTC)</th><th>Side</th><th>Setup</th><th>Grade</th><th>Entry</th><th>SL</th><th>TP</th><th>Exit</th><th>R</th></tr>${bt.trades.slice(-150).reverse().map(t=>`<tr><td>${t.entry_time.replace('T',' ').slice(0,16)}</td><td class="${t.direction==='BUY'?'up':'dn'}">${t.direction}</td><td>${t.setup}</td><td>${t.grade}</td><td>${fmt(t.entry)}</td><td>${fmt(t.sl)}</td><td>${fmt(t.tp)}</td><td>${t.exit_reason}</td><td class="${t.r>0?'up':t.r<0?'dn':''}">${fmt(t.r)}</td></tr>`).join('')}</table>`;
+  if(!eqChart){eqChart=LightweightCharts.createChart($('#equity'),{autoSize:true,layout:{background:{color:'#16181c'},textColor:'#8b8f98'},grid:{vertLines:{color:'#1d2026'},horzLines:{color:'#1d2026'}},timeScale:{borderColor:'#262a31'},rightPriceScale:{borderColor:'#262a31'}});eqLine=eqChart.addLineSeries({color:'#d4a843',lineWidth:2})}
+  const pts=[];bt.equity.forEach(e=>{const t=Date.parse(e.time)/1000;if(pts.length&&pts[pts.length-1].time>=t)pts[pts.length-1].value=e.r;else pts.push({time:t,value:e.r})});
+  eqLine.setData(pts);eqChart.timeScale().fitContent();
+}
+
+/* ---------- rules */
+const HELP={require_monthly:'Trade only with the monthly bias',require_weekly:'Weekly must also agree',min_htf_agree:'Min of W/D/H4 agreeing',struggle_required:'Yesterday must have struggled at the high/low',struggle_atr:'"Struggled" = within this many ATR',use_sr_setups:'Also trade S/R zone rejections',min_zone_strength:'Min S/R zone strength',level_tol_atr:'Wick may stop this short of the level (ATR)',wick_ratio:'Rejection wick ≥ this share of candle',confirm_bars:'M5 bars allowed to confirm',sl_buffer_atr:'Stop buffer beyond the wick (ATR)',min_risk_atr:'Min stop size (ATR)',max_risk_atr:'Max stop size (ATR)',min_rr:'Minimum reward:risk',max_rr:'Cap on reward:risk',obstacle_rr:'Skip if opposing level closer than (R)',be_at_r:'Move stop to breakeven at (R, 0 = off)',session_start_utc:'Session start (UTC hour)',session_end_utc:'Session end (UTC hour)',max_trades_per_day:'Max trades per day',spread:'Spread / costs ($)',zone_lookback_d:'S/R lookback (daily bars)',zone_lookback_h4:'S/R lookback (H4 bars)',zone_merge_atr:'Merge pivots within (ATR)',zone_pad_atr:'Zone padding (ATR)'};
+async function loadCfg(){
+  const c=await api('/api/config?inst='+INST);
+  $('#form').innerHTML=Object.entries(c).map(([k,v])=>`<div><label>${HELP[k]||k}</label>${typeof v==='boolean'?`<select data-k="${k}" data-t="b"><option value="true"${v?' selected':''}>Yes</option><option value="false"${!v?' selected':''}>No</option></select>`:`<input data-k="${k}" type="number" step="any" value="${v}">`}</div>`).join('');
+}
+$('#save').onclick=async()=>{const o={};document.querySelectorAll('#form [data-k]').forEach(e=>o[e.dataset.k]=e.dataset.t==='b'?e.value==='true':Number(e.value));
+  await api('/api/config?inst='+INST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)});$('#saved').textContent='Saved. Live scanner updated; re-run the backtest to compare.';refreshAll()};
+
+refreshAll(); setInterval(refreshAll,30000);
+</script>
+</body>
+</html>

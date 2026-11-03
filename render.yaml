@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: gold-model
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m goldmodel serve --cloud --poll 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: APP_PASSWORD
+        sync: false
+      - key: TWELVE_DATA_API_KEY
+        sync: false
