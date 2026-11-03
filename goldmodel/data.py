@@ -361,5 +361,32 @@ def update_live(inst: str, m5: pd.DataFrame) -> tuple[pd.DataFrame, str]:
             m1 = dukascopy(INSTRUMENTS["spot"]["duka"], "min", start, progress=None)
             new, src = resample(m1, "5min"), "Dukascopy"
     else:
-        new, src = yf_download(INSTRUMENTS["futures"]["yf"], "5m", "5d"), "Yahoo GC=F"
+        new = drop_forming(yf_download(INSTRUMENTS["futures"]["yf"], "5m", "5d"), bar)
+        out, src = merge(m5, new), "Yahoo GC=F (delayed ~15 min)"
+        if os.environ.get("OANDA_API_TOKEN") and not new.empty:
+            try:
+                out, basis, n = extend_with_spot_basis(out, new, drop_forming(oanda("M5", count=300), bar))
+                if n:
+                    src = f"Yahoo GC=F + {n} real-time bars estimated from OANDA spot (basis {basis:+.2f})"
+            except Exception as e:  # noqa: BLE001
+                src += f" (real-time estimate unavailable: {e})"
+        return out, src
     return merge(m5, drop_forming(new, bar)), src
+
+
+def extend_with_spot_basis(fut_all: pd.DataFrame, fut_real: pd.DataFrame, spot: pd.DataFrame, lookback: int = 12):
+    """Fill the gap between Yahoo's last delayed futures bar and now with spot + the current futures-spot basis.
+
+    The basis (futures minus spot, mostly cost of carry) moves slowly, so the median gap over the last hour of
+    overlapping bars gives a close real-time futures estimate. When Yahoo's real bars arrive they replace these."""
+    both = fut_real[["close"]].join(spot[["close"]], how="inner", lsuffix="_f", rsuffix="_s").tail(lookback)
+    if len(both) < 3 or spot.empty:
+        return fut_all, 0.0, 0
+    basis = float((both["close_f"] - both["close_s"]).median())
+    est = spot[spot.index > fut_real.index[-1]].copy()
+    if est.empty:
+        return fut_all, basis, 0
+    est[["open", "high", "low", "close"]] += basis
+    est["volume"] = 0.0
+    keep = fut_all[fut_all.index <= fut_real.index[-1]]          # drop previous estimates, real bars win
+    return merge(keep, est), basis, len(est)
